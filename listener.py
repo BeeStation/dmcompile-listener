@@ -6,7 +6,7 @@ import shutil
 import time
 from flask import Flask, jsonify, request, abort
 
-app= Flask(__name__)
+app = Flask(__name__)
 
 codeFile = "templates/code.dm"
 testDME = "templates/test.dme"
@@ -14,14 +14,13 @@ template = None
 mainProc = "/proc/main()"
 host = "127.0.0.1"
 
-@app.route("/compile", methods=["POST"])
+@app.route("/compile", methods = ["POST"])
 def setName():
-    if request.method=='POST':
+    if request.method == 'POST':
         posted_data = request.get_json()
         try:
             if 'code_to_compile' in posted_data:
-                data = compileTest(posted_data['code_to_compile'])
-                return data
+                return compileTest(posted_data['code_to_compile'])
             else:
                 abort(400)
         except:
@@ -69,7 +68,7 @@ def compileTest(codeText:str):
       
     shutil.rmtree(randomDir)
 
-    return (f"{outs}\n{errs}")
+    return f"{outs}\n{errs}"
 
 if __name__=='__main__':
     app.run(host=host)
