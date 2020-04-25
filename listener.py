@@ -48,7 +48,7 @@ def compileTest(codeText:str):
     os.mkdir(randomDir)
     shutil.copyfile(testDME, f"./{randomDir}/test.dme")
     with open(f'./{randomDir}/code.dm', 'a') as fc:
-        if '/proc/main()' not in codeText:
+        if mainProc not in codeText:
             fc.write(loadTemplate(codeText))
         else:
             fc.write(loadTemplate(codeText, False))
