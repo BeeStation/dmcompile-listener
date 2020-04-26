@@ -1,10 +1,11 @@
 import subprocess
 import random
 import string
-import os
 import shutil
 import time
+import platform
 from flask import Flask, jsonify, request, abort
+from pathlib import Path
 
 app = Flask(__name__)
 
@@ -13,6 +14,7 @@ testDME = "templates/test.dme"
 template = None
 mainProc = "/proc/main()"
 host = "127.0.0.1"
+hostOS = None
 
 @app.route("/compile", methods = ["POST"])
 def setName():
@@ -44,21 +46,25 @@ def randomString(stringLength=24):
 
 def compileTest(codeText:str):
     randomDir = randomString()
-    os.mkdir(randomDir)
+    Path.mkdir(randomDir)
     shutil.copyfile(testDME, f"./{randomDir}/test.dme")
     with open(f'./{randomDir}/code.dm', 'a') as fc:
         if mainProc not in codeText:
             fc.write(loadTemplate(codeText))
         else:
             fc.write(loadTemplate(codeText, False))
-
-    proc = subprocess.Popen(["cmd", "/c", f"docker run --name {randomDir} --rm -v {os.getcwd()}/{randomDir}:/app/code:ro test"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-
+    if hostOS == "Windows":
+        proc = subprocess.Popen([f"docker run --name {randomDir} --rm -v {Path.cwd()}/{randomDir}:/app/code:ro test"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    else:
+        proc = subprocess.Popen([f"{Path.home()}/bin/docker", "run", "--name", f"{randomDir}", "--rm", "-v", f"{Path.cwd()}/{randomDir}:/app/code:ro", "test"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     try:
         outs, errs = proc.communicate(timeout=5.0)
     except subprocess.TimeoutExpired:
         proc.kill()
-        subprocess.run(["cmd", "/c", f"docker stop {randomDir}"], capture_output=True)
+        if hostOS == "Windows":
+            subprocess.run(["cmd", "/c", f"docker stop {randomDir}"], capture_output=True)
+        else:
+            subprocess.run(["/home/dmcompile/bin/docker", "stop", f"{randomDir}"], capture_output=True)
         outs, errs = proc.communicate()
 
     outs = outs.decode('utf-8')
@@ -71,4 +77,5 @@ def compileTest(codeText:str):
     return f"{outs}\n{errs}"
 
 if __name__=='__main__':
+    hostOS = platform.system()
     app.run(host=host)
