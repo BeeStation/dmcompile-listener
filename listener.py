@@ -16,18 +16,17 @@ MAIN_PROC = "/proc/main()"
 TEST_DME = Path.cwd().joinpath("templates/test.dme")
 
 template = None
+test_killed = False
 
 @app.route("/compile", methods = ["POST"])
 def setName():
     if request.method == 'POST':
         posted_data = request.get_json()
-        try:
-            if 'code_to_compile' in posted_data:
-                return compileTest(posted_data['code_to_compile'])
-            else:
-                abort(400)
-        except:
+        if 'code_to_compile' in posted_data:
+            return jsonify(compileTest(posted_data['code_to_compile']))
+        else:
             abort(400)
+
 
 def loadTemplate(line:str, includeProc=True):
     with open(CODE_FILE) as filein:
@@ -59,14 +58,16 @@ def compileTest(codeText:str):
     else:
         proc = subprocess.Popen([Path.home().joinpath("/bin/docker"), "run", "--name", f"{randomDir.name}", "--rm", "-v", f"{randomDir}:/app/code:ro", "test"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     try:
-        outs, errs = proc.communicate(timeout=5.0)
+        outs, errs = proc.communicate(timeout=30)
+        test_killed = False
     except subprocess.TimeoutExpired:
         proc.kill()
         if HOST_OS == "Windows":
-            subprocess.run(["docker", "stop" f"{randomDir.name}"], capture_output=True)
+            subprocess.run(["docker", "stop", f"{randomDir.name}"], capture_output=True)
         else:
             subprocess.run([Path.home().joinpath("/bin/docker"), "stop", f"{randomDir.name}"], capture_output=True)
         outs, errs = proc.communicate()
+        test_killed = True
 
     outs = outs.decode('utf-8')
     errs = errs.decode('utf-8')
@@ -74,8 +75,12 @@ def compileTest(codeText:str):
     errs = (errs[:1200] + '...') if len(errs) > 1200 else errs
       
     shutil.rmtree(randomDir)
-
-    return f"{outs}\n{errs}"
+    results = {
+        "compile_log":outs,
+        "run_log":errs,
+        "timeout":test_killed
+    }
+    return results
 
 if __name__=='__main__':
     app.run(host=HOST)
