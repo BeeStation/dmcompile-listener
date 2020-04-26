@@ -9,12 +9,13 @@ from pathlib import Path
 
 app = Flask(__name__)
 
-codeFile = "templates/code.dm"
-testDME = "templates/test.dme"
+CODE_FILE = Path.cwd().joinpath("templates/code.dm")
+HOST = "127.0.0.1"
+HOST_OS = platform.system()
+MAIN_PROC = "/proc/main()"
+TEST_DME = Path.cwd().joinpath("templates/test.dme")
+
 template = None
-mainProc = "/proc/main()"
-host = "127.0.0.1"
-hostOS = None
 
 @app.route("/compile", methods = ["POST"])
 def setName():
@@ -29,12 +30,12 @@ def setName():
             abort(400)
 
 def loadTemplate(line:str, includeProc=True):
-    with open(codeFile) as filein:
+    with open(CODE_FILE) as filein:
         template = string.Template(filein.read())
 
     if includeProc:
         line = '\n\t'.join(line.splitlines())
-        d = {'proc':mainProc, 'code':f'{line}\n'}
+        d = {'proc':MAIN_PROC, 'code':f'{line}\n'}
     else:
         d = {'proc':line, 'code':''}
 
@@ -45,26 +46,26 @@ def randomString(stringLength=24):
     return ''.join(random.choice(letters) for i in range(stringLength))
 
 def compileTest(codeText:str):
-    randomDir = randomString()
-    Path.mkdir(randomDir)
-    shutil.copyfile(testDME, f"./{randomDir}/test.dme")
-    with open(f'./{randomDir}/code.dm', 'a') as fc:
-        if mainProc not in codeText:
+    randomDir = Path.cwd().joinpath(randomString())
+    randomDir.mkdir()
+    shutil.copyfile(TEST_DME, randomDir.joinpath("test.dme"))
+    with open(randomDir.joinpath("code.dm"), 'a') as fc:
+        if MAIN_PROC not in codeText:
             fc.write(loadTemplate(codeText))
         else:
             fc.write(loadTemplate(codeText, False))
-    if hostOS == "Windows":
-        proc = subprocess.Popen([f"docker run --name {randomDir} --rm -v {Path.cwd()}/{randomDir}:/app/code:ro test"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    if HOST_OS == "Windows":
+        proc = subprocess.Popen(["docker", "run", "--name", f"{randomDir.name}", "--rm", "-v", f"{randomDir}:/app/code:ro", "test"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     else:
-        proc = subprocess.Popen([f"{Path.home()}/bin/docker", "run", "--name", f"{randomDir}", "--rm", "-v", f"{Path.cwd()}/{randomDir}:/app/code:ro", "test"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        proc = subprocess.Popen([Path.home().joinpath("/bin/docker"), "run", "--name", f"{randomDir.name}", "--rm", "-v", f"{randomDir}:/app/code:ro", "test"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     try:
         outs, errs = proc.communicate(timeout=5.0)
     except subprocess.TimeoutExpired:
         proc.kill()
-        if hostOS == "Windows":
-            subprocess.run(["cmd", "/c", f"docker stop {randomDir}"], capture_output=True)
+        if HOST_OS == "Windows":
+            subprocess.run(["docker", "stop" f"{randomDir.name}"], capture_output=True)
         else:
-            subprocess.run(["/home/dmcompile/bin/docker", "stop", f"{randomDir}"], capture_output=True)
+            subprocess.run([Path.home().joinpath("/bin/docker"), "stop", f"{randomDir.name}"], capture_output=True)
         outs, errs = proc.communicate()
 
     outs = outs.decode('utf-8')
@@ -77,5 +78,4 @@ def compileTest(codeText:str):
     return f"{outs}\n{errs}"
 
 if __name__=='__main__':
-    hostOS = platform.system()
-    app.run(host=host)
+    app.run(host=HOST)
