@@ -56,7 +56,7 @@ def compileTest(codeText:str):
     if HOST_OS == "Windows":
         proc = subprocess.Popen(["docker", "run", "--name", f"{randomDir.name}", "--rm", "-v", f"{randomDir}:/app/code:ro", "test"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     else:
-        proc = subprocess.Popen([Path.home().joinpath("/bin/docker"), "run", "--name", f"{randomDir.name}", "--rm", "-v", f"{randomDir}:/app/code:ro", "test"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        proc = subprocess.Popen([f"{Path.home()}/bin/docker", "run", "--name", f"{randomDir.name}", "--rm", "-v", f"{randomDir}:/app/code:ro", "test"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     try:
         outs, errs = proc.communicate(timeout=30)
         test_killed = False
@@ -65,7 +65,7 @@ def compileTest(codeText:str):
         if HOST_OS == "Windows":
             subprocess.run(["docker", "stop", f"{randomDir.name}"], capture_output=True)
         else:
-            subprocess.run([Path.home().joinpath("/bin/docker"), "stop", f"{randomDir.name}"], capture_output=True)
+            subprocess.run([f"{Path.home()}/bin/docker", "stop", f"{randomDir.name}"], capture_output=True)
         outs, errs = proc.communicate()
         test_killed = True
 
