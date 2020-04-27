@@ -12,7 +12,7 @@ app = Flask(__name__)
 CODE_FILE = Path.cwd().joinpath("templates/code.dm")
 HOST = "127.0.0.1"
 HOST_OS = platform.system()
-MAIN_PROC = "/proc/main()"
+MAIN_PROC = "proc/main()"
 TEST_DME = Path.cwd().joinpath("templates/test.dme")
 
 template = None
