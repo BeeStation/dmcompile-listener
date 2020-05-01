@@ -19,11 +19,11 @@ template = None
 test_killed = False
 
 @app.route("/compile", methods = ["POST"])
-def setName():
+def startCompile():
     if request.method == 'POST':
         posted_data = request.get_json()
         if 'code_to_compile' in posted_data:
-            return jsonify(compileTest(posted_data['code_to_compile']))
+            return jsonify(compileTest(posted_data['code_to_compile'], posted_data['byond_version']))
         else:
             abort(400)
 
@@ -44,7 +44,7 @@ def randomString(stringLength=24):
     letters = string.ascii_lowercase
     return ''.join(random.choice(letters) for i in range(stringLength))
 
-def compileTest(codeText:str):
+def compileTest(codeText:str, version:str):
     randomDir = Path.cwd().joinpath(randomString())
     randomDir.mkdir()
     shutil.copyfile(TEST_DME, randomDir.joinpath("test.dme"))
@@ -54,9 +54,9 @@ def compileTest(codeText:str):
         else:
             fc.write(loadTemplate(codeText, False))
     if HOST_OS == "Windows":
-        proc = subprocess.Popen(["docker", "run", "--name", f"{randomDir.name}", "--rm", "-v", f"{randomDir}:/app/code:ro", "test"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        proc = subprocess.Popen(["docker", "run", "--name", f"{randomDir.name}", "--rm", "-v", f"{randomDir}:/app/code:ro", f"test:{version}"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     else:
-        proc = subprocess.Popen([f"{Path.home()}/bin/docker", "run", "--name", f"{randomDir.name}", "--rm", "-v", f"{randomDir}:/app/code:ro", "test"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        proc = subprocess.Popen([f"{Path.home()}/bin/docker", "run", "--name", f"{randomDir.name}", "--rm", "-v", f"{randomDir}:/app/code:ro", f"test:{version}"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     try:
         outs, errs = proc.communicate(timeout=30)
         test_killed = False
@@ -75,11 +75,18 @@ def compileTest(codeText:str):
     errs = (errs[:1200] + '...') if len(errs) > 1200 else errs
       
     shutil.rmtree(randomDir)
-    results = {
-        "compile_log":outs,
-        "run_log":errs,
-        "timeout":test_killed
-    }
+
+    if f"Unable to find image 'test:{version}' locally" in errs:
+        results = {
+            "build_error": True
+        }
+    else:
+        results = {
+            "compile_log":outs,
+            "run_log":errs,
+            "timeout":test_killed
+        }
+        
     return results
 
 if __name__=='__main__':
