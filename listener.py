@@ -5,6 +5,7 @@ import shutil
 import time
 import platform
 import docker
+import re
 from flask import Flask, jsonify, request, abort
 from pathlib import Path
 
@@ -48,14 +49,15 @@ def randomString(stringLength=24):
 
 def checkVersions(version:str):
     try:
-        tags_list = client.images.list(name='test')[0].tags
+        image_list = client.images.list(name='test')
     except IndexError:
         return False
 
-    if f"test:{version}" in tags_list:
-        return True
-    else:
-        return False
+    for image in image_list:
+        if f"test:{version}" in image.tags:
+            return True
+
+    return False
 
 def buildVersion(version:str):
     #Check if the version is already built
@@ -88,9 +90,9 @@ def compileTest(codeText:str, version:str):
             fc.write(loadTemplate(codeText, False))
     if HOST_OS == "Windows":
         #To get cleaner outputs, we run docker as a subprocess rather than through the API
-        proc = subprocess.Popen(["docker", "run", "--name", f"{randomDir.name}", "--rm", "-v", f"{randomDir}:/app/code:ro", f"test:{version}"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        proc = subprocess.Popen(["docker", "run", "--name", f"{randomDir.name}", "--rm", "--network", "none", "-v", f"{randomDir}:/app/code:ro", f"test:{version}"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     else:
-        proc = subprocess.Popen([f"{Path.home()}/bin/docker", "run", "--name", f"{randomDir.name}", "--rm", "-v", f"{randomDir}:/app/code:ro", f"test:{version}"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        proc = subprocess.Popen([f"{Path.home()}/bin/docker", "run", "--name", f"{randomDir.name}", "--rm", "--network", "none", "-v", f"{randomDir}:/app/code:ro", f"test:{version}"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     try:
         outs, errs = proc.communicate(timeout=30)
         test_killed = False
@@ -105,6 +107,7 @@ def compileTest(codeText:str, version:str):
 
     outs = outs.decode('utf-8')
     errs = errs.decode('utf-8')
+    errs = re.sub(r'The BYOND hub reports that port \d* is not reachable.', '', errs) #remove the network error message
     outs = (outs[:1200] + '...') if len(outs) > 1200 else outs
     errs = (errs[:1200] + '...') if len(errs) > 1200 else errs
       
