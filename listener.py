@@ -92,9 +92,10 @@ def compileTest(codeText:str, version:str):
         #To get cleaner outputs, we run docker as a subprocess rather than through the API
         proc = subprocess.Popen(["docker", "run", "--name", f"{randomDir.name}", "--rm", "--network", "none", "-v", f"{randomDir}:/app/code:ro", f"test:{version}"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     else:
+        #Expects the linux user to be running docker locally, not as root
         proc = subprocess.Popen([f"{Path.home()}/bin/docker", "run", "--name", f"{randomDir.name}", "--rm", "--network", "none", "-v", f"{randomDir}:/app/code:ro", f"test:{version}"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     try:
-        outs, errs = proc.communicate(timeout=30)
+        compile_log, run_log = proc.communicate(timeout=30) #A bit hacky, but provides exceptionally clean results. The main output will be captured as the compile_log while the "error" output is captured as run_log
         test_killed = False
     except subprocess.TimeoutExpired:
         proc.kill()
@@ -102,26 +103,26 @@ def compileTest(codeText:str, version:str):
             subprocess.run(["docker", "stop", f"{randomDir.name}"], capture_output=True)
         else:
             subprocess.run([f"{Path.home()}/bin/docker", "stop", f"{randomDir.name}"], capture_output=True)
-        outs, errs = proc.communicate()
+        compile_log, run_log = proc.communicate()
         test_killed = True
 
-    outs = outs.decode('utf-8')
-    errs = errs.decode('utf-8')
-    errs = re.sub(r'The BYOND hub reports that port \d* is not reachable.', '', errs) #remove the network error message
-    outs = (outs[:1200] + '...') if len(outs) > 1200 else outs
-    errs = (errs[:1200] + '...') if len(errs) > 1200 else errs
+    compile_log = compile_log.decode('utf-8')
+    run_log = run_log.decode('utf-8')
+    run_log = re.sub(r'The BYOND hub reports that port \d* is not reachable.', '', run_log) #remove the network error message
+    compile_log = (compile_log[:1200] + '...') if len(compile_log) > 1200 else compile_log
+    run_log = (run_log[:1200] + '...') if len(run_log) > 1200 else run_log
       
     shutil.rmtree(randomDir)
 
-    if f"Unable to find image 'test:{version}' locally" in errs:
+    if f"Unable to find image 'test:{version}' locally" in run_log:
         results = {
             "build_error": True,
-            "exception": errs
+            "exception": run_log
         }
     else:
         results = {
-            "compile_log":outs,
-            "run_log":errs,
+            "compile_log":compile_log,
+            "run_log":run_log,
             "timeout":test_killed
         }
         
