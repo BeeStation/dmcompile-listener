@@ -49,12 +49,12 @@ def randomString(stringLength=24):
 
 def checkVersions(version:str):
     try:
-        image_list = client.images.list(name='test')
+        image_list = client.images.list(name='beestation/byond')
     except IndexError:
         return False
 
     for image in image_list:
-        if f"test:{version}" in image.tags:
+        if f"beestation/byond:{version}" in image.tags:
             return True
 
     return False
@@ -66,7 +66,10 @@ def buildVersion(version:str):
     else:
         try:
             print(f"Attempting to build version: {version}")
-            return client.images.build(path=f'{Path.cwd()}', dockerfile='Dockerfile', rm=True, pull=True, tag=f'test:{version}', buildargs={'BYOND_VERSION':version})
+            return client.images.build(path=f'https://github.com/BeeStation/byond-docker.git', rm=True, pull=True, tag=f'beestation/byond:{version}', buildargs={
+                'buildtime_BYOND_MAJOR': version.split('.')[0],
+                'buildtime_BYOND_MINOR': version.split('.')[1]
+                })
         except docker.errors.BuildError:
             raise
 
@@ -88,12 +91,13 @@ def compileTest(codeText:str, version:str):
             fc.write(loadTemplate(codeText))
         else:
             fc.write(loadTemplate(codeText, False))
+    command = ['bash', '-c', 'cp code/* .; DreamMaker test.dme; DreamDaemon test.dmb -close -verbose -ultrasafe | cat']
     if HOST_OS == "Windows":
         #To get cleaner outputs, we run docker as a subprocess rather than through the API
-        proc = subprocess.Popen(["docker", "run", "--name", f"{randomDir.name}", "--rm", "--network", "none", "-v", f"{randomDir}:/app/code:ro", f"test:{version}"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        proc = subprocess.Popen(["docker", "run", "--name", f"{randomDir.name}", "--rm", "--network", "none", "-v", f"{randomDir}:/app/code:ro", "-w", "/app", f"beestation/byond:{version}"] + command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     else:
         #Expects the linux user to be running docker locally, not as root
-        proc = subprocess.Popen([f"{Path.home()}/bin/docker", "run", "--name", f"{randomDir.name}", "--rm", "--network", "none", "-v", f"{randomDir}:/app/code:ro", f"test:{version}"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        proc = subprocess.Popen([f"/usr/bin/docker", "run", "--name", f"{randomDir.name}", "--rm", "--network", "none", "-v", f"{randomDir}:/app/code:ro", "-w", "/app", f"beestation/byond:{version}"] + command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     try:
         compile_log, run_log = proc.communicate(timeout=30) #A bit hacky, but provides exceptionally clean results. The main output will be captured as the compile_log while the "error" output is captured as run_log
         test_killed = False
@@ -114,7 +118,7 @@ def compileTest(codeText:str, version:str):
       
     shutil.rmtree(randomDir)
 
-    if f"Unable to find image 'test:{version}' locally" in run_log:
+    if f"Unable to find image 'byond:{version}' locally" in run_log:
         results = {
             "build_error": True,
             "exception": run_log
@@ -125,7 +129,7 @@ def compileTest(codeText:str, version:str):
             "run_log":run_log,
             "timeout":test_killed
         }
-        
+
     return results
 
 if __name__=='__main__':
