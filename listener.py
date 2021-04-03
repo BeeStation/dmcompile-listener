@@ -113,6 +113,10 @@ def compileTest(codeText:str, version:str):
     compile_log = compile_log.decode('utf-8')
     run_log = run_log.decode('utf-8')
     run_log = re.sub(r'The BYOND hub reports that port \d* is not reachable.', '', run_log) #remove the network error message
+    run_log = re.sub(r'\n---------------\n', '\n', run_log) #remove the dashes
+    run_log = re.sub(r'World opened on network port \d*\.\n', '', run_log)
+    compile_log = re.sub(r'loading test.dme\n', '', compile_log)
+    compile_log = re.sub(r'saving test.dmb\n', '', compile_log)
     compile_log = (compile_log[:1200] + '...') if len(compile_log) > 1200 else compile_log
     run_log = (run_log[:1200] + '...') if len(run_log) > 1200 else run_log
       
