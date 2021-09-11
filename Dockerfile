@@ -1,5 +1,4 @@
-ARG BYOND_VERSION=513.1542
-FROM beestation/byond:${BYOND_VERSION}
+FROM beestation/byond
 
 WORKDIR /app
 
