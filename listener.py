@@ -66,7 +66,7 @@ def buildVersion(version:str):
     else:
         try:
             print(f"Attempting to build version: {version}")
-            return client.images.build(path=f'https://github.com/BeeStation/byond-docker.git', rm=True, pull=True, tag=f'beestation/byond:{version}', buildargs={
+            return client.images.build(path=f'https://github.com/BeeStation/byond-docker.git', platform='linux/386', rm=True, pull=True, tag=f'beestation/byond:{version}', buildargs={
                 'buildtime_BYOND_MAJOR': version.split('.')[0],
                 'buildtime_BYOND_MINOR': version.split('.')[1]
                 })
@@ -112,10 +112,10 @@ def compileTest(codeText:str, version:str):
     command = ['bash', '-c', 'cp code/* .; DreamMaker test.dme; DreamDaemon test.dmb -close -verbose -ultrasafe | cat']
     if HOST_OS == "Windows":
         #To get cleaner outputs, we run docker as a subprocess rather than through the API
-        proc = subprocess.Popen(["docker", "run", "--name", f"{randomDir.name}", "--rm", "--network", "none", "-v", f"{randomDir}:/app/code:ro", "-w", "/app", f"beestation/byond:{version}"] + command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        proc = subprocess.Popen(["docker", "run", "--name", f"{randomDir.name}", "--platform", "linux/386", "--rm", "--network", "none", "-v", f"{randomDir}:/app/code:ro", "-w", "/app", f"beestation/byond:{version}"] + command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     else:
         #Expects the linux user to be running docker locally, not as root
-        proc = subprocess.Popen([f"/usr/bin/docker", "run", "--name", f"{randomDir.name}", "--rm", "--network", "none", "-v", f"{randomDir}:/app/code:ro", "-w", "/app", f"beestation/byond:{version}"] + command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        proc = subprocess.Popen([f"/usr/bin/docker", "run", "--name", f"{randomDir.name}", "--platform", "linux/386", "--rm", "--network", "none", "-v", f"{randomDir}:/app/code:ro", "-w", "/app", f"beestation/byond:{version}"] + command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     try:
         compile_log, run_log = proc.communicate(timeout=30) #A bit hacky, but provides exceptionally clean results. The main output will be captured as the compile_log while the "error" output is captured as run_log
         test_killed = False
