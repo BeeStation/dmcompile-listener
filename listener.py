@@ -73,6 +73,22 @@ def buildVersion(version:str):
         except docker.errors.BuildError:
             raise
 
+def normalizeCode(codeText:str):
+    indent_step = float('inf')
+    lines = codeText.split('\n')
+    for line in lines:
+        indent_level = len(line) - len(line.lstrip())
+        if indent_level > 0:
+            indent_step = min(indent_step, indent_level)
+    if indent_step == float('inf'):
+        return codeText
+    result_lines = []
+    for line in lines:
+        stripped = line.lstrip()
+        indent_level = len(line) - len(stripped)
+        result_lines.append('\t' * (indent_level // indent_step) + stripped)
+    return '\n'.join(result_lines)
+
 def compileTest(codeText:str, version:str):
     try:
         buildVersion(version=version)
@@ -82,6 +98,8 @@ def compileTest(codeText:str, version:str):
             "exception": str(e) 
         }
         return results
+
+    codeText = normalizeCode(codeText)
 
     randomDir = Path.cwd().joinpath(randomString())
     randomDir.mkdir()
