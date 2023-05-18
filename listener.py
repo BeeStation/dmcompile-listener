@@ -14,7 +14,7 @@ app = Flask(__name__)
 client = docker.from_env()
 
 CODE_FILE = Path.cwd().joinpath("templates/code.dm")
-HOST = "127.0.0.1"
+HOST = "0.0.0.0"
 PORT = 5000
 HOST_OS = platform.system()
 MAIN_PROC = "proc/main()"
@@ -58,12 +58,12 @@ def randomString(stringLength=24):
 
 def checkVersions(version: str):
     try:
-        image_list = client.images.list(name="beestation/byond")
+        image_list = client.images.list(name="test")
     except IndexError:
         return False
 
     for image in image_list:
-        if f"beestation/byond:{version}" in image.tags:
+        if f"test:{version}" in image.tags:
             return True
 
     return False
@@ -76,7 +76,7 @@ def buildVersion(version: str):
     else:
         try:
             print(f"Attempting to build version: {version}")
-            return client.images.build(
+            client.images.build(
                 path=f"https://github.com/BeeStation/byond-docker.git",
                 platform="linux/386",
                 rm=True,
@@ -86,6 +86,14 @@ def buildVersion(version: str):
                     "buildtime_BYOND_MAJOR": version.split(".")[0],
                     "buildtime_BYOND_MINOR": version.split(".")[1],
                 },
+            )
+            return client.images.build(
+                path=f"{Path.cwd()}",
+                dockerfile="Dockerfile",
+                rm=True,
+                pull=True,
+                tag=f"test:{version}",
+                buildargs={"BYOND_VERSION": version},
             )
         except docker.errors.BuildError:
             raise
@@ -125,11 +133,6 @@ def compileTest(codeText: str, version: str):
             fc.write(loadTemplate(codeText))
         else:
             fc.write(loadTemplate(codeText, False))
-    command = [
-        "bash",
-        "-c",
-        "cp code/* .; DreamMaker test.dme; DreamDaemon test.dmb -close -verbose -ultrasafe | cat",
-    ]
     docker_path = None
     if HOST_OS == "Windows":
         docker_path = "docker"
@@ -152,9 +155,8 @@ def compileTest(codeText: str, version: str):
             f"{randomDir}:/app/code:ro",
             "-w",
             "/app",
-            f"beestation/byond:{version}",
-        ]
-        + command,
+            f"test:{version}",
+        ],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
     )
@@ -185,7 +187,7 @@ def compileTest(codeText: str, version: str):
 
     shutil.rmtree(randomDir)
 
-    if f"Unable to find image 'byond:{version}' locally" in run_log:
+    if f"Unable to find image 'test:{version}' locally" in run_log:
         results = {"build_error": True, "exception": run_log}
     else:
         results = {

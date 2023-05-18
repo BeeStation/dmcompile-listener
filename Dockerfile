@@ -1,4 +1,5 @@
-FROM beestation/byond
+ARG BYOND_VERSION
+FROM beestation/byond:${BYOND_VERSION}
 
 WORKDIR /app
 
