@@ -6,6 +6,7 @@ import time
 import platform
 import docker
 import re
+import os
 from flask import Flask, jsonify, request, abort
 from pathlib import Path
 
@@ -110,21 +111,20 @@ def compileTest(codeText:str, version:str):
         else:
             fc.write(loadTemplate(codeText, False))
     command = ['bash', '-c', 'cp code/* .; DreamMaker test.dme; DreamDaemon test.dmb -close -verbose -ultrasafe | cat']
+    docker_path = None
     if HOST_OS == "Windows":
-        #To get cleaner outputs, we run docker as a subprocess rather than through the API
-        proc = subprocess.Popen(["docker", "run", "--name", f"{randomDir.name}", "--platform", "linux/386", "--rm", "--network", "none", "-v", f"{randomDir}:/app/code:ro", "-w", "/app", f"beestation/byond:{version}"] + command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        docker_path = "docker"
     else:
-        #Expects the linux user to be running docker locally, not as root
-        proc = subprocess.Popen([f"/usr/bin/docker", "run", "--name", f"{randomDir.name}", "--platform", "linux/386", "--rm", "--network", "none", "-v", f"{randomDir}:/app/code:ro", "-w", "/app", f"beestation/byond:{version}"] + command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        docker_path = f"{Path.home()}/bin/docker"
+        if not os.path.isfile(docker_path):
+            docker_path = "/usr/bin/docker"
+    proc = subprocess.Popen([docker_path, "run", "--name", f"{randomDir.name}", "--platform", "linux/386", "--rm", "--network", "none", "-v", f"{randomDir}:/app/code:ro", "-w", "/app", f"beestation/byond:{version}"] + command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     try:
         compile_log, run_log = proc.communicate(timeout=30) #A bit hacky, but provides exceptionally clean results. The main output will be captured as the compile_log while the "error" output is captured as run_log
         test_killed = False
     except subprocess.TimeoutExpired:
         proc.kill()
-        if HOST_OS == "Windows":
-            subprocess.run(["docker", "stop", f"{randomDir.name}"], capture_output=True)
-        else:
-            subprocess.run([f"{Path.home()}/bin/docker", "stop", f"{randomDir.name}"], capture_output=True)
+        subprocess.run([docker_path, "stop", f"{randomDir.name}"], capture_output=True)
         compile_log, run_log = proc.communicate()
         test_killed = True
 
