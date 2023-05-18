@@ -138,8 +138,6 @@ def compileTest(codeText: str, version: str):
         docker_path = "docker"
     else:
         docker_path = f"{Path.home()}/bin/docker"
-        if not os.path.isfile(docker_path):
-            docker_path = "/usr/bin/docker"
     proc = subprocess.Popen(
         [
             docker_path,
