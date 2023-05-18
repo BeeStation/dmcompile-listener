@@ -14,7 +14,7 @@ app = Flask(__name__)
 client = docker.from_env()
 
 CODE_FILE = Path.cwd().joinpath("templates/code.dm")
-HOST = "0.0.0.0"
+HOST = "127.0.0.1"
 PORT = 5000
 HOST_OS = platform.system()
 MAIN_PROC = "proc/main()"
