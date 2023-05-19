@@ -151,8 +151,6 @@ def compileTest(codeText: str, version: str):
             "none",
             "-v",
             f"{randomDir}:/app/code:ro",
-            "-w",
-            "/app",
             f"test:{version}",
         ],
         stdout=subprocess.PIPE,
