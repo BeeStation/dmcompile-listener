@@ -91,7 +91,6 @@ def buildVersion(version: str):
                 path=f"{Path.cwd()}",
                 dockerfile="Dockerfile",
                 rm=True,
-                pull=True,
                 tag=f"test:{version}",
                 buildargs={"BYOND_VERSION": version},
             )
