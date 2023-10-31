@@ -1,13 +1,14 @@
 import platform
 import random
 import re
+import os
+from flask import Flask, jsonify, request, abort
 import shutil
 import string
 import subprocess
 from pathlib import Path
 
 import docker
-from flask import Flask, abort, jsonify, request
 
 app = Flask(__name__)
 client = docker.from_env()
@@ -28,7 +29,11 @@ def startCompile():
     if request.method == "POST":
         posted_data = request.get_json()
         if "code_to_compile" in posted_data:
-            return jsonify(compileTest(posted_data["code_to_compile"], posted_data["byond_version"]))
+            return jsonify(
+                compileTest(
+                    posted_data["code_to_compile"], posted_data["byond_version"]
+                )
+            )
         else:
             abort(400)
 
@@ -71,16 +76,43 @@ def buildVersion(version: str):
     else:
         try:
             print(f"Attempting to build version: {version}")
+            client.images.build(
+                path=f"https://github.com/BeeStation/byond-docker.git",
+                platform="linux/386",
+                rm=True,
+                pull=True,
+                tag=f"beestation/byond:{version}",
+                buildargs={
+                    "buildtime_BYOND_MAJOR": version.split(".")[0],
+                    "buildtime_BYOND_MINOR": version.split(".")[1],
+                },
+            )
             return client.images.build(
                 path=f"{Path.cwd()}",
                 dockerfile="Dockerfile",
                 rm=True,
-                pull=True,
                 tag=f"test:{version}",
                 buildargs={"BYOND_VERSION": version},
             )
         except docker.errors.BuildError:
             raise
+
+
+def normalizeCode(codeText: str):
+    indent_step = float("inf")
+    lines = codeText.split("\n")
+    for line in lines:
+        indent_level = len(line) - len(line.lstrip())
+        if indent_level > 0:
+            indent_step = min(indent_step, indent_level)
+    if indent_step == float("inf"):
+        return codeText
+    result_lines = []
+    for line in lines:
+        stripped = line.lstrip()
+        indent_level = len(line) - len(stripped)
+        result_lines.append("\t" * (indent_level // indent_step) + stripped)
+    return "\n".join(result_lines)
 
 
 def compileTest(codeText: str, version: str):
@@ -90,6 +122,8 @@ def compileTest(codeText: str, version: str):
         results = {"build_error": True, "exception": str(e)}
         return results
 
+    codeText = normalizeCode(codeText)
+
     randomDir = Path.cwd().joinpath(randomString())
     randomDir.mkdir()
     shutil.copyfile(TEST_DME, randomDir.joinpath("test.dme"))
@@ -98,42 +132,31 @@ def compileTest(codeText: str, version: str):
             fc.write(loadTemplate(codeText))
         else:
             fc.write(loadTemplate(codeText, False))
+    docker_path = None
     if HOST_OS == "Windows":
-        # To get cleaner outputs, we run docker as a subprocess rather than through the API
-        proc = subprocess.Popen(
-            [
-                "docker",
-                "run",
-                "--name",
-                f"{randomDir.name}",
-                "--rm",
-                "--network",
-                "none",
-                "-v",
-                f"{randomDir}:/app/code:ro",
-                f"test:{version}",
-            ],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
+        docker_path = "docker"
     else:
-        # Expects the linux user to be running docker locally, not as root
-        proc = subprocess.Popen(
-            [
-                f"{Path.home()}/bin/docker",
-                "run",
-                "--name",
-                f"{randomDir.name}",
-                "--rm",
-                "--network",
-                "none",
-                "-v",
-                f"{randomDir}:/app/code:ro",
-                f"test:{version}",
-            ],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
+        docker_path = f"{Path.home()}/bin/docker"
+        if not os.path.isfile(docker_path):
+            docker_path = "/usr/bin/docker"
+    proc = subprocess.Popen(
+        [
+            docker_path,
+            "run",
+            "--name",
+            f"{randomDir.name}",
+            "--platform",
+            "linux/386",
+            "--rm",
+            "--network",
+            "none",
+            "-v",
+            f"{randomDir}:/app/code:ro",
+            f"test:{version}",
+        ],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
     try:
         compile_log, run_log = proc.communicate(
             timeout=30
@@ -141,10 +164,7 @@ def compileTest(codeText: str, version: str):
         test_killed = False
     except subprocess.TimeoutExpired:
         proc.kill()
-        if HOST_OS == "Windows":
-            subprocess.run(["docker", "stop", f"{randomDir.name}"], capture_output=True)
-        else:
-            subprocess.run([f"{Path.home()}/bin/docker", "stop", f"{randomDir.name}"], capture_output=True)
+        subprocess.run([docker_path, "stop", f"{randomDir.name}"], capture_output=True)
         compile_log, run_log = proc.communicate()
         test_killed = True
 
@@ -153,7 +173,13 @@ def compileTest(codeText: str, version: str):
     run_log = re.sub(
         r"The BYOND hub reports that port \d* is not reachable.", "", run_log
     )  # remove the network error message
-    compile_log = (compile_log[:1200] + "...") if len(compile_log) > 1200 else compile_log
+    run_log = re.sub(r"\n---------------\n", "\n", run_log)  # remove the dashes
+    run_log = re.sub(r"World opened on network port \d*\.\n", "", run_log)
+    compile_log = re.sub(r"loading test.dme\n", "", compile_log)
+    compile_log = re.sub(r"saving test.dmb\n", "", compile_log)
+    compile_log = (
+        (compile_log[:1200] + "...") if len(compile_log) > 1200 else compile_log
+    )
     run_log = (run_log[:1200] + "...") if len(run_log) > 1200 else run_log
 
     shutil.rmtree(randomDir)
@@ -161,7 +187,11 @@ def compileTest(codeText: str, version: str):
     if f"Unable to find image 'test:{version}' locally" in run_log:
         results = {"build_error": True, "exception": run_log}
     else:
-        results = {"compile_log": compile_log, "run_log": run_log, "timeout": test_killed}
+        results = {
+            "compile_log": compile_log,
+            "run_log": run_log,
+            "timeout": test_killed,
+        }
 
     return results
 
